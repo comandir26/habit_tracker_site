@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'users',
+    'guilds',
 ]
 
 # Указываем, что по умолчанию все запросы должны проверятся через токен

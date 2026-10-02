@@ -32,7 +32,9 @@ export async function apiRequest(path, options = {}) {
     headers: {
       Accept: 'application/json',
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // DRF uses TokenAuthentication; an override keeps the client compatible
+      // with a future JWT-based deployment.
+      ...(token ? { Authorization: `${import.meta.env.VITE_AUTH_SCHEME ?? 'Token'} ${token}` } : {}),
       ...headers,
     },
   })
