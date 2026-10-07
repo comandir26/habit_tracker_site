@@ -36,6 +36,7 @@ class GuildMember(models.Model):
         related_name="guild_memberships",
     )
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.MEMBER)
+    xp = models.PositiveIntegerField(default=0)
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -81,3 +82,25 @@ class GuildHabit(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class HabitCompletion(models.Model):
+    """One user's completion of one habit on one calendar day.
+
+    The database constraint is deliberately the source of truth for
+    idempotency: retries of the same request cannot produce a second reward.
+    """
+
+    habit = models.ForeignKey(GuildHabit, on_delete=models.CASCADE, related_name="completions")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="habit_completions")
+    completed_on = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-completed_on", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("habit", "user", "completed_on"),
+                name="unique_habit_completion_per_day",
+            ),
+        ]

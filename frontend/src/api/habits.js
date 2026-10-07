@@ -2,12 +2,21 @@ import { ApiError, apiRequest } from './client.js'
 import { demoDifficulties } from './habitOptions.js'
 
 const demoKey = 'inhabit.demoHabits'
+const demoCompletionKey = 'inhabit.demoHabitCompletions'
 
 function loadDemoHabits() {
   try {
     return JSON.parse(window.sessionStorage.getItem(demoKey) || '[]')
   } catch {
     return []
+  }
+}
+
+function loadDemoCompletions() {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(demoCompletionKey) || '{}')
+  } catch {
+    return {}
   }
 }
 
@@ -30,4 +39,26 @@ export async function createHabit(guildId, data) {
   const habit = { ...data, id: crypto.randomUUID(), guild: 'demo', xp_reward: difficulty.base_xp * data.xp_weight, created_at: new Date().toISOString() }
   window.sessionStorage.setItem(demoKey, JSON.stringify([...loadDemoHabits(), habit]))
   return habit
+}
+
+export async function completeHabit(guildId, habit) {
+  if (guildId !== 'demo') {
+    return apiRequest(`/habits/${encodeURIComponent(habit.id)}/complete/`, { method: 'POST', body: {} })
+  }
+
+  const date = new Date().toISOString().slice(0, 10)
+  const completions = loadDemoCompletions()
+  const key = `${habit.id}:${date}`
+  const created = !completions[key]
+  if (created) {
+    completions[key] = true
+    window.sessionStorage.setItem(demoCompletionKey, JSON.stringify(completions))
+  }
+  return {
+    habit_id: habit.id,
+    completed_on: date,
+    created,
+    awarded_xp: created ? habit.xp_reward : 0,
+    member_id: '1',
+  }
 }
