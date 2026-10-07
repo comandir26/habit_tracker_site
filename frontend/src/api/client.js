@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api'
 const TOKEN_STORAGE_KEY = 'inhabit.accessToken'
 
 export class ApiError extends Error {
@@ -34,7 +34,7 @@ export async function apiRequest(path, options = {}) {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       // DRF uses TokenAuthentication; an override keeps the client compatible
       // with a future JWT-based deployment.
-      ...(token ? { Authorization: `${import.meta.env.VITE_AUTH_SCHEME ?? 'Token'} ${token}` } : {}),
+      ...(token ? { Authorization: `${import.meta.env?.VITE_AUTH_SCHEME ?? 'Token'} ${token}` } : {}),
       ...headers,
     },
   })

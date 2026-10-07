@@ -8,6 +8,7 @@ export const demoGuild = {
   description: 'Сильнее вместе: маленькие шаги каждый день создают большую победу.',
   color: '#7c4dff',
   isPrivate: false,
+  isOwner: true,
   level: 3,
   experience: 3470,
   experienceToLevel: 5000,
@@ -33,6 +34,7 @@ function normalizeGuild(payload) {
     description: source.description ?? demoGuild.description,
     color: source.color ?? source.theme_color ?? demoGuild.color,
     isPrivate: source.is_private ?? source.isPrivate ?? false,
+    isOwner: source.is_owner === true,
     level: Number(source.level ?? demoGuild.level),
     experience,
     experienceToLevel: Number(source.experience_to_level ?? source.xp_to_level ?? source.next_level_xp ?? demoGuild.experienceToLevel),
@@ -73,18 +75,14 @@ export async function createGuild(data) {
     if (!canUseDemo(error)) throw error
     const guild = { ...loadStoredDemo(), ...data, id: 'demo', level: 1, experience: 0, members: [demoGuild.members[0]] }
     saveDemo(guild)
+    window.sessionStorage.removeItem('inhabit.demoHabits')
     return { guild, isDemo: true }
   }
 }
 
 export async function getGuild(id) {
   if (id === 'demo') return { guild: loadStoredDemo(), isDemo: true }
-  try {
-    const guild = normalizeGuild(await apiRequest(`/guilds/${encodeURIComponent(id)}/`))
-    if (guild) return { guild, isDemo: false }
-    throw new ApiError('Сервер вернул неполный ответ.')
-  } catch (error) {
-    if (!canUseDemo(error)) throw error
-    return { guild: loadStoredDemo(), isDemo: true }
-  }
+  const guild = normalizeGuild(await apiRequest(`/guilds/${encodeURIComponent(id)}/`))
+  if (guild) return { guild, isDemo: false }
+  throw new ApiError('Сервер вернул неполный ответ.')
 }

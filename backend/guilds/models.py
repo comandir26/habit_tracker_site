@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class Guild(models.Model):
@@ -44,3 +45,39 @@ class GuildMember(models.Model):
 
     def __str__(self):
         return f"{self.user} in {self.guild}"
+
+
+class GuildHabit(models.Model):
+    class Schedule(models.TextChoices):
+        DAILY = "daily", "Daily"
+        WEEKDAYS = "weekdays", "Selected weekdays"
+
+    class Difficulty(models.TextChoices):
+        EASY = "easy", "Easy"
+        MEDIUM = "medium", "Medium"
+        HARD = "hard", "Hard"
+
+    BASE_XP = {Difficulty.EASY: 10, Difficulty.MEDIUM: 20, Difficulty.HARD: 30}
+
+    guild = models.ForeignKey(Guild, on_delete=models.CASCADE, related_name="habits")
+    name = models.CharField(max_length=120)
+    schedule = models.CharField(max_length=16, choices=Schedule.choices, default=Schedule.DAILY)
+    weekdays = models.JSONField(default=list, blank=True)
+    difficulty = models.CharField(max_length=16, choices=Difficulty.choices, default=Difficulty.EASY)
+    xp_weight = models.PositiveSmallIntegerField(
+        default=1, validators=[MinValueValidator(1), MaxValueValidator(10)],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+        constraints = [
+            models.CheckConstraint(condition=models.Q(xp_weight__gte=1, xp_weight__lte=10), name="habit_xp_weight_range"),
+        ]
+
+    @property
+    def xp_reward(self):
+        return self.BASE_XP[self.difficulty] * self.xp_weight
+
+    def __str__(self):
+        return self.name
