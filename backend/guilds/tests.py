@@ -1,11 +1,14 @@
+from datetime import timedelta
+
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from users.models import User
 
-from .models import Guild, GuildHabit, GuildMember
+from .models import Guild, GuildHabit, GuildMember, HabitCompletion
 
 
 class GuildApiTests(APITestCase):
@@ -203,3 +206,71 @@ class GuildHabitApiTests(APITestCase):
                 response = self.client.post(self.url, {"name": "Read", "difficulty": value, "xp_weight": weight}, format="json")
                 self.assertEqual(response.status_code, status.HTTP_201_CREATED)
                 self.assertEqual(response.data["xp_reward"], base_xp * weight)
+
+
+class HabitCompletionApiTests(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner")
+        self.member = User.objects.create_user(username="member")
+        self.outsider = User.objects.create_user(username="outsider")
+        self.guild = Guild.objects.create(name="Focus", owner=self.owner)
+        self.owner_membership = GuildMember.objects.create(
+            guild=self.guild, user=self.owner, role=GuildMember.Role.OWNER,
+        )
+        self.member_membership = GuildMember.objects.create(guild=self.guild, user=self.member)
+        self.habit = GuildHabit.objects.create(guild=self.guild, name="Read", difficulty="medium", xp_weight=2)
+        self.url = reverse("habit-complete", args=(self.habit.pk,))
+
+    def test_completion_awards_xp_once_for_same_user_and_day(self):
+        self.client.force_authenticate(self.member)
+
+        first = self.client.post(self.url, {"completed_on": "2026-10-07"}, format="json")
+        second = self.client.post(self.url, {"completed_on": "2026-10-07"}, format="json")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertTrue(first.data["created"])
+        self.assertEqual(first.data["awarded_xp"], 40)
+        self.assertEqual(first.data["member_id"], self.member_membership.pk)
+        self.assertEqual(first.data["member_xp"], 40)
+        self.assertFalse(second.data["created"])
+        self.assertEqual(second.data["awarded_xp"], 0)
+        self.assertEqual(second.data["member_xp"], 40)
+        self.member_membership.refresh_from_db()
+        self.assertEqual(self.member_membership.xp, 40)
+        self.assertEqual(HabitCompletion.objects.count(), 1)
+
+    def test_each_member_has_own_completion_and_xp(self):
+        self.client.force_authenticate(self.owner)
+        self.client.post(self.url, {"completed_on": "2026-10-07"}, format="json")
+        self.client.force_authenticate(self.member)
+        response = self.client.post(self.url, {"completed_on": "2026-10-07"}, format="json")
+
+        self.assertTrue(response.data["created"])
+        self.owner_membership.refresh_from_db()
+        self.member_membership.refresh_from_db()
+        self.assertEqual(self.owner_membership.xp, 40)
+        self.assertEqual(self.member_membership.xp, 40)
+        self.assertEqual(HabitCompletion.objects.count(), 2)
+
+    def test_completion_requires_membership_and_valid_date(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.force_authenticate(self.outsider)
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_404_NOT_FOUND)
+
+        self.client.force_authenticate(self.member)
+        response = self.client.post(self.url, {"completed_on": "not-a-date"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(HabitCompletion.objects.exists())
+
+    def test_completion_cannot_be_recorded_for_a_future_date(self):
+        self.client.force_authenticate(self.member)
+        tomorrow = timezone.localdate() + timedelta(days=1)
+
+        response = self.client.post(self.url, {"completed_on": tomorrow.isoformat()}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(HabitCompletion.objects.exists())
+        self.member_membership.refresh_from_db()
+        self.assertEqual(self.member_membership.xp, 0)

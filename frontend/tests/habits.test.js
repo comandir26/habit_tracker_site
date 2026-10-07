@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createHabit, getHabits, getHabitDifficulties } from '../src/api/habits.js'
+import { completeHabit, createHabit, getHabits, getHabitDifficulties } from '../src/api/habits.js'
 import { habitSchedule, validateHabit } from '../src/api/habitOptions.js'
 
 const storage = new Map()
@@ -52,4 +52,24 @@ test('real creation sends token, guild path and habit fields; list accepts pagin
   }
   assert.equal((await createHabit('42', habit)).id, 7)
   assert.deepEqual(await getHabits('42'), [{ id: 7 }])
+})
+
+test('completion uses its dedicated API endpoint and demo completion is idempotent', async () => {
+  global.fetch = async (url, options) => {
+    assert.equal(url, '/api/habits/7/complete/')
+    assert.equal(options.method, 'POST')
+    assert.deepEqual(JSON.parse(options.body), {})
+    return { ok: true, status: 200, json: async () => ({ created: true, awarded_xp: 120, member_id: 3, member_xp: 120 }) }
+  }
+  assert.equal((await completeHabit('42', { id: 7 })).awarded_xp, 120)
+
+  storage.clear()
+  const demoHabit = { id: 'demo-habit', xp_reward: 20 }
+  const first = await completeHabit('demo', demoHabit)
+  const retry = await completeHabit('demo', demoHabit)
+  assert.equal(first.created, true)
+  assert.equal(first.awarded_xp, 20)
+  assert.equal(first.member_id, '1')
+  assert.equal(retry.created, false)
+  assert.equal(retry.awarded_xp, 0)
 })
