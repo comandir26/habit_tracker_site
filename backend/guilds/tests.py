@@ -1,6 +1,6 @@
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework.test import APITestCase
 
 from users.models import User
@@ -13,12 +13,12 @@ class GuildApiTests(APITestCase):
         self.owner = User.objects.create_user(username="owner", password="secure-password")
         self.member = User.objects.create_user(username="member", password="secure-password")
         self.outsider = User.objects.create_user(username="outsider", password="secure-password")
-        self.owner_token = Token.objects.create(user=self.owner)
-        self.member_token = Token.objects.create(user=self.member)
-        self.outsider_token = Token.objects.create(user=self.outsider)
+        self.owner_token = str(AccessToken.for_user(self.owner))
+        self.member_token = str(AccessToken.for_user(self.member))
+        self.outsider_token = str(AccessToken.for_user(self.outsider))
 
     def authenticate(self, token):
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     def create_guild(self, **overrides):
         values = {

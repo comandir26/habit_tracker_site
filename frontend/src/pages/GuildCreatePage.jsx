@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createGuild } from '../api/guilds'
+import { AuthControls } from '../auth/AuthControls'
 
 const colors = [
   { name: 'Индиго', value: '#5b5bd6' },
@@ -39,7 +40,7 @@ export function GuildCreatePage() {
       <header className="topbar">
         <Link className="brand" to="/">inHabit</Link>
         <span className="topbar-caption">Новая гильдия</span>
-        <div className="avatar" aria-label="Профиль Алексея">А</div>
+        <AuthControls />
       </header>
 
       <section className="form-layout" aria-labelledby="page-title">
