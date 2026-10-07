@@ -43,7 +43,7 @@ test('real guild errors remain visible and cannot produce local demo success', a
 test('real creation sends token, guild path and habit fields; list accepts pagination', async () => {
   global.fetch = async (url, options) => {
     assert.equal(url, '/api/guilds/42/habits/')
-    assert.equal(options.headers.Authorization, 'Token test-token')
+    assert.equal(options.headers.Authorization, 'Bearer test-token')
     if (options.method === 'POST') {
       assert.deepEqual(JSON.parse(options.body), habit)
       return { ok: true, status: 201, json: async () => ({ ...habit, id: 7, xp_reward: 120 }) }

@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
+import { AuthControls } from '../auth/AuthControls'
 
 export function HomePage() {
   return (
     <main className="page-shell dashboard-home">
       <section className="welcome-card" aria-labelledby="page-title">
+        <div className="home-auth"><AuthControls /></div>
         <p className="eyebrow">⚡ inHabit · ваш путь</p>
         <h1 id="page-title">Маленькие шаги. Большие победы.</h1>
         <p>Соберите гильдию, поддерживайте друзей и превращайте привычки в серию достижений.</p>

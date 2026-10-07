@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { getGuild } from '../api/guilds'
 import { getHabits } from '../api/habits'
 import { habitSchedule, demoDifficulties } from '../api/habitOptions'
+import { AuthControls } from '../auth/AuthControls'
 
 export function GuildDetailsPage() {
   const { guildId } = useParams()
@@ -37,7 +38,7 @@ export function GuildDetailsPage() {
       <header className="topbar">
         <Link className="brand" to="/">inHabit</Link>
         <nav aria-label="Основная навигация"><Link to="/">Сегодня</Link><span className="active-nav">Гильдии</span></nav>
-        <div className="avatar" aria-label="Профиль Алексея">А</div>
+        <AuthControls />
       </header>
 
       <section className="guild-hero" style={{ '--guild-color': guild.color }}>
