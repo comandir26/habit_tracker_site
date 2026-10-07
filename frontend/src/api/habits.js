@@ -19,6 +19,36 @@ export async function getHabits(guildId) {
   return habits
 }
 
+function getBrowserTimezone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+}
+
+function getBrowserIsoWeekday() {
+  return ((new Date().getDay() + 6) % 7) + 1
+}
+
+export async function getTodayHabits() {
+  const habits = loadDemoHabits()
+  const weekday = getBrowserIsoWeekday()
+  return {
+    date: new Date().toLocaleDateString('en-CA'),
+    timezone: getBrowserTimezone(),
+    habits: habits.filter((habit) => habit.schedule === 'daily' || habit.weekdays.includes(weekday)).map((habit) => ({
+      ...habit,
+      guild_name: 'Режим зверя',
+      guild_color: '#7c4dff',
+    })),
+  }
+}
+
+export async function getTodayHabitsFromApi() {
+  const payload = await apiRequest('/habits/today/')
+  if (!Array.isArray(payload?.habits) || !payload.date || !payload.timezone) {
+    throw new ApiError('Сервер вернул неполный список привычек на сегодня.')
+  }
+  return payload
+}
+
 export async function getHabitDifficulties(guildId) {
   if (guildId === 'demo') return demoDifficulties
   return apiRequest('/habit-difficulties/')
