@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -8,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Guild, GuildHabit, GuildMember, HabitCompletion
-from .serializers import GuildHabitSerializer, GuildSerializer, HabitCompletionSerializer
+from .serializers import GuildHabitSerializer, GuildSerializer, HabitCompletionSerializer, TodayHabitSerializer
 
 
 class GuildListCreateView(generics.ListCreateAPIView):
@@ -117,4 +119,39 @@ class HabitCompletionCreateView(APIView):
             "awarded_xp": habit.xp_reward if created else 0,
             "member_id": membership.pk,
             "member_xp": membership.xp,
+        })
+
+
+class TodayHabitListView(APIView):
+    """Returns only the request user's habits scheduled for their local day."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @staticmethod
+    def get_user_timezone(user):
+        try:
+            return ZoneInfo(user.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            # Existing accounts may contain an old invalid value. Falling back
+            # keeps the list usable until the profile can be corrected.
+            return ZoneInfo(settings.TIME_ZONE)
+
+    def get(self, request):
+        user_timezone = self.get_user_timezone(request.user)
+        local_date = timezone.localdate(timezone=user_timezone)
+        local_weekday = local_date.isoweekday()
+        accessible_habits = (
+            GuildHabit.objects.filter(guild__memberships__user=request.user)
+            .select_related("guild")
+            .distinct()
+        )
+        today_habits = [
+            habit for habit in accessible_habits
+            if habit.schedule == GuildHabit.Schedule.DAILY or local_weekday in habit.weekdays
+        ]
+
+        return Response({
+            "date": local_date.isoformat(),
+            "timezone": str(user_timezone),
+            "habits": TodayHabitSerializer(today_habits, many=True).data,
         })

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { completeHabit, createHabit, getHabits, getHabitDifficulties } from '../src/api/habits.js'
+import { completeHabit, createHabit, getHabits, getHabitDifficulties, getTodayHabitsFromApi } from '../src/api/habits.js'
 import { habitSchedule, validateHabit } from '../src/api/habitOptions.js'
 
 const storage = new Map()
@@ -72,4 +72,12 @@ test('completion uses its dedicated API endpoint and demo completion is idempote
   assert.equal(first.member_id, '1')
   assert.equal(retry.created, false)
   assert.equal(retry.awarded_xp, 0)
+})
+
+test('today endpoint returns date, timezone and only accepts complete payloads', async () => {
+  global.fetch = async (url) => {
+    assert.equal(url, '/api/habits/today/')
+    return { ok: true, status: 200, json: async () => ({ date: '2026-10-07', timezone: 'Europe/Samara', habits: [{ id: 8 }] }) }
+  }
+  assert.deepEqual(await getTodayHabitsFromApi(), { date: '2026-10-07', timezone: 'Europe/Samara', habits: [{ id: 8 }] })
 })

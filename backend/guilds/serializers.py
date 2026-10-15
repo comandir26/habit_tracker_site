@@ -80,3 +80,13 @@ class HabitCompletionSerializer(serializers.ModelSerializer):
         if value > timezone.localdate():
             raise serializers.ValidationError("A habit cannot be completed in the future.")
         return value
+
+
+class TodayHabitSerializer(GuildHabitSerializer):
+    """A habit together with the guild context needed by the Today screen."""
+
+    guild_name = serializers.CharField(source="guild.name", read_only=True)
+    guild_color = serializers.CharField(source="guild.color", read_only=True)
+
+    class Meta(GuildHabitSerializer.Meta):
+        fields = GuildHabitSerializer.Meta.fields + ("guild_name", "guild_color")
