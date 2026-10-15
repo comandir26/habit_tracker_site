@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AuthControls } from '../auth/AuthControls'
+
 import { getTodayHabits, getTodayHabitsFromApi } from '../api/habits'
 import { habitSchedule } from '../api/habitOptions'
 
@@ -28,6 +30,7 @@ export function HomePage() {
   return (
     <main className="page-shell dashboard-home">
       <section className="welcome-card" aria-labelledby="page-title">
+        <div className="home-auth"><AuthControls /></div>
         <p className="eyebrow">⚡ inHabit · ваш путь</p>
         <h1 id="page-title">Привычки на сегодня</h1>
         {state.loading && <p role="status">Собираем ваш список…</p>}
