@@ -65,3 +65,13 @@ class GuildHabitSerializer(serializers.ModelSerializer):
         else:
             attrs["weekdays"] = []
         return attrs
+
+
+class TodayHabitSerializer(GuildHabitSerializer):
+    """A habit together with the guild context needed by the Today screen."""
+
+    guild_name = serializers.CharField(source="guild.name", read_only=True)
+    guild_color = serializers.CharField(source="guild.color", read_only=True)
+
+    class Meta(GuildHabitSerializer.Meta):
+        fields = GuildHabitSerializer.Meta.fields + ("guild_name", "guild_color")

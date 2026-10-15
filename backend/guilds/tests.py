@@ -1,3 +1,6 @@
+from datetime import datetime, timezone as datetime_timezone
+from unittest.mock import patch
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -203,3 +206,49 @@ class GuildHabitApiTests(APITestCase):
                 response = self.client.post(self.url, {"name": "Read", "difficulty": value, "xp_weight": weight}, format="json")
                 self.assertEqual(response.status_code, status.HTTP_201_CREATED)
                 self.assertEqual(response.data["xp_reward"], base_xp * weight)
+
+
+class TodayHabitApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="traveller", timezone="Pacific/Auckland")
+        self.other_user = User.objects.create_user(username="outsider", timezone="UTC")
+        self.guild = Guild.objects.create(name="Morning team", color="#0f9f81", owner=self.user)
+        self.other_guild = Guild.objects.create(name="Private team", owner=self.other_user)
+        GuildMember.objects.create(guild=self.guild, user=self.user, role=GuildMember.Role.OWNER)
+        GuildMember.objects.create(guild=self.other_guild, user=self.other_user, role=GuildMember.Role.OWNER)
+        self.daily = GuildHabit.objects.create(guild=self.guild, name="Daily", schedule="daily")
+        self.tuesday = GuildHabit.objects.create(guild=self.guild, name="Tuesday", schedule="weekdays", weekdays=[2])
+        self.wednesday = GuildHabit.objects.create(guild=self.guild, name="Wednesday", schedule="weekdays", weekdays=[3])
+        GuildHabit.objects.create(guild=self.other_guild, name="Hidden", schedule="daily")
+        self.client.force_authenticate(self.user)
+
+    @patch("guilds.views.timezone.now", return_value=datetime(2026, 10, 6, 12, tzinfo=datetime_timezone.utc))
+    def test_list_uses_the_users_local_weekday_and_includes_guild_context(self, _mock_now):
+        response = self.client.get(reverse("today-habit-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # It is Wednesday in Pacific/Auckland at the mocked UTC instant.
+        self.assertEqual(response.data["date"], "2026-10-07")
+        self.assertEqual(response.data["timezone"], "Pacific/Auckland")
+        self.assertEqual(
+            [habit["id"] for habit in response.data["habits"]],
+            [self.daily.id, self.wednesday.id],
+        )
+        self.assertEqual(response.data["habits"][0]["guild_name"], "Morning team")
+        self.assertEqual(response.data["habits"][0]["guild_color"], "#0f9f81")
+
+    @patch("guilds.views.timezone.now", return_value=datetime(2026, 10, 6, 12, tzinfo=datetime_timezone.utc))
+    def test_invalid_timezone_falls_back_to_project_timezone(self, _mock_now):
+        self.user.timezone = "Not/A_Real_Timezone"
+        self.user.save(update_fields=["timezone"])
+
+        response = self.client.get(reverse("today-habit-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["timezone"], "UTC")
+        self.assertEqual(response.data["date"], "2026-10-06")
+        self.assertEqual([habit["id"] for habit in response.data["habits"]], [self.daily.id, self.tuesday.id])
+
+    def test_authentication_is_required_for_today_list(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(reverse("today-habit-list")).status_code, status.HTTP_401_UNAUTHORIZED)
