@@ -1,12 +1,16 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from django.conf import settings
 from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Guild, GuildHabit, GuildMember
-from .serializers import GuildHabitSerializer, GuildSerializer
+from .models import Guild, GuildHabit, GuildMember, HabitCompletion
+from .serializers import GuildHabitSerializer, GuildSerializer, HabitCompletionSerializer, TodayHabitSerializer
 
 
 class GuildListCreateView(generics.ListCreateAPIView):
@@ -80,3 +84,74 @@ class HabitDifficultyListView(APIView):
             {"value": value, "label": label, "base_xp": GuildHabit.BASE_XP[value]}
             for value, label in GuildHabit.Difficulty.choices
         ])
+
+
+class HabitCompletionCreateView(APIView):
+    """Mark a habit complete once per user and calendar day, awarding XP once."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @transaction.atomic
+    def post(self, request, habit_id):
+        habit = get_object_or_404(
+            GuildHabit.objects.select_related("guild"),
+            pk=habit_id,
+            guild__memberships__user=request.user,
+        )
+        serializer = HabitCompletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        completed_on = serializer.validated_data.get("completed_on", timezone.localdate())
+
+        completion, created = HabitCompletion.objects.get_or_create(
+            habit=habit,
+            user=request.user,
+            completed_on=completed_on,
+        )
+        membership = GuildMember.objects.get(guild=habit.guild, user=request.user)
+        if created:
+            GuildMember.objects.filter(pk=membership.pk).update(xp=F("xp") + habit.xp_reward)
+            membership.refresh_from_db(fields=("xp",))
+
+        return Response({
+            "habit_id": habit.pk,
+            "completed_on": completion.completed_on,
+            "created": created,
+            "awarded_xp": habit.xp_reward if created else 0,
+            "member_id": membership.pk,
+            "member_xp": membership.xp,
+        })
+
+
+class TodayHabitListView(APIView):
+    """Returns only the request user's habits scheduled for their local day."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @staticmethod
+    def get_user_timezone(user):
+        try:
+            return ZoneInfo(user.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            # Existing accounts may contain an old invalid value. Falling back
+            # keeps the list usable until the profile can be corrected.
+            return ZoneInfo(settings.TIME_ZONE)
+
+    def get(self, request):
+        user_timezone = self.get_user_timezone(request.user)
+        local_date = timezone.localdate(timezone=user_timezone)
+        local_weekday = local_date.isoweekday()
+        accessible_habits = (
+            GuildHabit.objects.filter(guild__memberships__user=request.user)
+            .select_related("guild")
+            .distinct()
+        )
+        today_habits = [
+            habit for habit in accessible_habits
+            if habit.schedule == GuildHabit.Schedule.DAILY or local_weekday in habit.weekdays
+        ]
+
+        return Response({
+            "date": local_date.isoformat(),
+            "timezone": str(user_timezone),
+            "habits": TodayHabitSerializer(today_habits, many=True).data,
+        })

@@ -1,8 +1,10 @@
 import re
 
+from django.utils import timezone
+
 from rest_framework import serializers
 
-from .models import Guild, GuildHabit, GuildMember
+from .models import Guild, GuildHabit, GuildMember, HabitCompletion
 
 
 class GuildMemberSerializer(serializers.ModelSerializer):
@@ -10,7 +12,7 @@ class GuildMemberSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GuildMember
-        fields = ("id", "username", "role", "joined_at")
+        fields = ("id", "username", "role", "xp", "joined_at")
         read_only_fields = fields
 
 
@@ -65,3 +67,26 @@ class GuildHabitSerializer(serializers.ModelSerializer):
         else:
             attrs["weekdays"] = []
         return attrs
+
+
+class HabitCompletionSerializer(serializers.ModelSerializer):
+    completed_on = serializers.DateField(required=False)
+
+    class Meta:
+        model = HabitCompletion
+        fields = ("completed_on",)
+
+    def validate_completed_on(self, value):
+        if value > timezone.localdate():
+            raise serializers.ValidationError("A habit cannot be completed in the future.")
+        return value
+
+
+class TodayHabitSerializer(GuildHabitSerializer):
+    """A habit together with the guild context needed by the Today screen."""
+
+    guild_name = serializers.CharField(source="guild.name", read_only=True)
+    guild_color = serializers.CharField(source="guild.color", read_only=True)
+
+    class Meta(GuildHabitSerializer.Meta):
+        fields = GuildHabitSerializer.Meta.fields + ("guild_name", "guild_color")
