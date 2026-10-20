@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: inhabit-api
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py migrate --noinput && gunicorn config.wsgi:application
