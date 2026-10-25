@@ -12,7 +12,8 @@ from rest_framework.test import APITestCase
 
 from users.models import User
 
-from .models import Guild, GuildHabit, GuildMember, HabitCompletion
+from . import models as guild_models
+from .models import INVITE_CODE_ALPHABET, Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
 
 
 class GuildApiTests(APITestCase):
@@ -324,3 +325,138 @@ class TodayHabitApiTests(APITestCase):
     def test_authentication_is_required_for_today_list(self):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(reverse("today-habit-list")).status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class GuildInviteApiTests(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner")
+        self.member = User.objects.create_user(username="member")
+        self.outsider = User.objects.create_user(username="outsider")
+        self.guild = Guild.objects.create(name="Focus", description="Deep work", color="#0f9f81", owner=self.owner)
+        GuildMember.objects.create(guild=self.guild, user=self.owner, role=GuildMember.Role.OWNER)
+        GuildMember.objects.create(guild=self.guild, user=self.member)
+        self.url = reverse("guild-invite-list-create", args=(self.guild.pk,))
+        self.client.force_authenticate(self.owner)
+
+    def create_invite(self, **overrides):
+        values = {"guild": self.guild, "created_by": self.owner, "expires_at": timezone.now() + timedelta(days=7)}
+        values.update(overrides)
+        return GuildInvite.objects.create(**values)
+
+    def test_owner_creates_invite_with_default_week_lifetime(self):
+        before = timezone.now()
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        invite = GuildInvite.objects.get(pk=response.data["id"])
+        self.assertEqual(invite.guild, self.guild)
+        self.assertEqual(invite.created_by, self.owner)
+        self.assertEqual(response.data["code"], invite.code)
+        self.assertFalse(response.data["is_expired"])
+        self.assertEqual(len(invite.code), 8)
+        self.assertTrue(set(invite.code) <= set(INVITE_CODE_ALPHABET))
+        self.assertAlmostEqual(invite.expires_at, before + timedelta(days=7), delta=timedelta(seconds=5))
+
+    def test_lifetime_must_be_one_of_allowed_values(self):
+        response = self.client.post(self.url, {"expires_in_days": 30}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        invite = GuildInvite.objects.get(pk=response.data["id"])
+        self.assertGreater(invite.expires_at, timezone.now() + timedelta(days=29))
+
+        for value in (0, 5, 365, True, "week"):
+            response = self.client.post(self.url, {"expires_in_days": value}, format="json")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, value)
+            self.assertIn("expires_in_days", response.data)
+        self.assertEqual(GuildInvite.objects.count(), 1)
+
+    def test_client_cannot_choose_code_or_guild(self):
+        other_guild = Guild.objects.create(name="Other", owner=self.outsider)
+        response = self.client.post(
+            self.url, {"code": "AAAAAAAA", "guild": other_guild.pk, "expires_at": "2000-01-01T00:00:00Z"}, format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        invite = GuildInvite.objects.get(pk=response.data["id"])
+        self.assertNotEqual(invite.code, "AAAAAAAA")
+        self.assertEqual(invite.guild, self.guild)
+        self.assertFalse(invite.is_expired)
+
+    def test_member_cannot_create_or_list_invites(self):
+        self.create_invite()
+        self.client.force_authenticate(self.member)
+
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(self.url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(GuildInvite.objects.count(), 1)
+
+    def test_outsider_and_missing_guild_are_hidden(self):
+        self.client.force_authenticate(self.outsider)
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.client.get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+
+        self.client.force_authenticate(self.owner)
+        missing_url = reverse("guild-invite-list-create", args=(self.guild.pk + 100,))
+        self.assertEqual(self.client.post(missing_url, {}, format="json").status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_owner_lists_only_active_invites_of_the_guild(self):
+        active = self.create_invite()
+        self.create_invite(expires_at=timezone.now() - timedelta(seconds=1))
+        other_guild = Guild.objects.create(name="Other", owner=self.owner)
+        GuildMember.objects.create(guild=other_guild, user=self.owner, role=GuildMember.Role.OWNER)
+        self.create_invite(guild=other_guild)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([invite["id"] for invite in response.data], [active.pk])
+
+    def test_authentication_is_required(self):
+        invite = self.create_invite()
+        self.client.force_authenticate(None)
+
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(self.url).status_code, status.HTTP_401_UNAUTHORIZED)
+        detail_url = reverse("invite-detail", args=(invite.code,))
+        self.assertEqual(self.client.get(detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_any_signed_in_user_can_preview_invite_case_insensitively(self):
+        invite = self.create_invite()
+        self.client.force_authenticate(self.outsider)
+
+        response = self.client.get(reverse("invite-detail", args=(invite.code.lower(),)))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["code"], invite.code)
+        self.assertFalse(response.data["is_member"])
+        self.assertEqual(response.data["guild"], {
+            "id": self.guild.pk,
+            "name": "Focus",
+            "description": "Deep work",
+            "color": "#0f9f81",
+            "owner": "owner",
+            "members_count": 2,
+        })
+        self.assertNotIn("members", response.data["guild"])
+
+        self.client.force_authenticate(self.member)
+        self.assertTrue(self.client.get(reverse("invite-detail", args=(invite.code,))).data["is_member"])
+
+    def test_unknown_and_expired_codes_are_rejected(self):
+        expired = self.create_invite(expires_at=timezone.now() - timedelta(seconds=1))
+
+        expired_response = self.client.get(reverse("invite-detail", args=(expired.code,)))
+        missing_response = self.client.get(reverse("invite-detail", args=("NOPE2345",)))
+
+        self.assertEqual(expired_response.status_code, status.HTTP_410_GONE)
+        self.assertNotIn("guild", expired_response.data)
+        self.assertEqual(missing_response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_code_collision_is_regenerated_before_saving(self):
+        existing = self.create_invite()
+        generated = iter([existing.code, "FRESH234"])
+
+        with patch.object(guild_models, "generate_invite_code", lambda: next(generated)):
+            invite = self.create_invite(code=existing.code)
+
+        self.assertEqual(invite.code, "FRESH234")
+        self.assertEqual(GuildInvite.objects.filter(code=existing.code).count(), 1)
