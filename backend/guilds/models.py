@@ -1,6 +1,17 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+
+# Ambiguous characters (0/O, 1/I/L) are excluded so a code can be dictated aloud.
+INVITE_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+INVITE_CODE_LENGTH = 8
+
+
+def generate_invite_code():
+    return "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(INVITE_CODE_LENGTH))
 
 
 class Guild(models.Model):
@@ -46,6 +57,33 @@ class GuildMember(models.Model):
 
     def __str__(self):
         return f"{self.user} in {self.guild}"
+
+
+class GuildInvite(models.Model):
+    """A code, shared directly or as a link, that the guild owner hands to friends."""
+
+    LIFETIME_DAYS = (1, 7, 30)
+    DEFAULT_LIFETIME_DAYS = 7
+
+    guild = models.ForeignKey(Guild, on_delete=models.CASCADE, related_name="invites")
+    code = models.CharField(max_length=16, unique=True, default=generate_invite_code, editable=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="created_guild_invites",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"{self.code} for {self.guild}"
 
 
 class GuildHabit(models.Model):

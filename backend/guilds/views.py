@@ -9,8 +9,10 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Guild, GuildHabit, GuildMember, HabitCompletion
-from .serializers import GuildHabitSerializer, GuildSerializer, HabitCompletionSerializer, TodayHabitSerializer
+from .models import Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
+from .serializers import (
+    GuildHabitSerializer, GuildInviteSerializer, GuildSerializer, HabitCompletionSerializer, TodayHabitSerializer,
+)
 
 
 class GuildListCreateView(generics.ListCreateAPIView):
@@ -74,6 +76,29 @@ class GuildHabitListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(guild=self.get_guild())
+
+
+class GuildInviteCreateView(generics.CreateAPIView):
+    """Only the owner can invite; members get 403 and outsiders do not see the guild."""
+
+    serializer_class = GuildInviteSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_guild(self):
+        if not hasattr(self, "guild"):
+            self.guild = get_object_or_404(
+                Guild.objects.filter(memberships__user=self.request.user),
+                pk=self.kwargs["guild_id"],
+            )
+        return self.guild
+
+    def create(self, request, *args, **kwargs):
+        if self.get_guild().owner_id != request.user.pk:
+            raise PermissionDenied("Only the guild owner can invite members.")
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(guild=self.get_guild(), created_by=self.request.user)
 
 
 class HabitDifficultyListView(APIView):
