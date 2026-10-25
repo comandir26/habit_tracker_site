@@ -59,6 +59,33 @@ class GuildInviteSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+
+class InvitePreviewSerializer(serializers.ModelSerializer):
+    """What a holder of the code sees before joining: no member list or habits."""
+
+    guild = serializers.SerializerMethodField()
+    is_member = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GuildInvite
+        fields = ("code", "expires_at", "guild", "is_member")
+        read_only_fields = fields
+
+    def get_guild(self, obj):
+        guild = obj.guild
+        return {
+            "id": guild.pk,
+            "name": guild.name,
+            "description": guild.description,
+            "color": guild.color,
+            "owner": guild.owner.username,
+            "members_count": guild.memberships.count(),
+        }
+
+    def get_is_member(self, obj):
+        request = self.context.get("request")
+        return bool(request and obj.guild.memberships.filter(user=request.user).exists())
+
 class GuildHabitSerializer(serializers.ModelSerializer):
     xp_reward = serializers.IntegerField(read_only=True)
     weekdays = serializers.JSONField(required=False)

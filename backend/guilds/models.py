@@ -82,6 +82,17 @@ class GuildInvite(models.Model):
     def is_expired(self):
         return timezone.now() >= self.expires_at
 
+    @staticmethod
+    def normalize_code(code):
+        return code.strip().upper()
+
+    def save(self, *args, **kwargs):
+        # 31^8 codes make collisions rare; regenerating here keeps them from
+        # surfacing as errors, and the unique constraint still guards races.
+        while GuildInvite.objects.filter(code=self.code).exclude(pk=self.pk).exists():
+            self.code = generate_invite_code()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.code} for {self.guild}"
 
