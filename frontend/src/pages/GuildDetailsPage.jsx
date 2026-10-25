@@ -78,7 +78,7 @@ export function GuildDetailsPage() {
           <h1>{guild.name}</h1>
           <p>{guild.description}</p>
         </div>
-        <button className="button button-light" type="button">Пригласить</button>
+        {guild.isOwner && <Link className="button button-light" to={`/guilds/${encodeURIComponent(guildId)}/invites`}>Пригласить</Link>}
       </section>
       {isDemo && <p className="demo-note">Демо-режим: гильдия и привычки хранятся локально в этой вкладке браузера.</p>}
 
