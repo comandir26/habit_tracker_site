@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import (
-    GuildDetailView, GuildHabitListCreateView, GuildInviteListCreateView, GuildListCreateView, HabitCompletionCreateView,
+    GuildDetailView, GuildHabitListCreateView, GuildInviteListCreateView, GuildLeaderboardView, GuildListCreateView, HabitCompletionCreateView,
     HabitDifficultyListView, InviteDetailView, InviteJoinView, TodayHabitListView,
 )
 
@@ -9,6 +9,7 @@ from .views import (
 urlpatterns = [
     path("guilds/", GuildListCreateView.as_view(), name="guild-list-create"),
     path("guilds/<int:pk>/", GuildDetailView.as_view(), name="guild-detail"),
+    path("guilds/<int:guild_id>/leaderboard/", GuildLeaderboardView.as_view(), name="guild-leaderboard"),
     path("guilds/<int:guild_id>/habits/", GuildHabitListCreateView.as_view(), name="guild-habit-list-create"),
     path("guilds/<int:guild_id>/invites/", GuildInviteListCreateView.as_view(), name="guild-invite-list-create"),
     path("invites/<str:code>/", InviteDetailView.as_view(), name="invite-detail"),
