@@ -8,11 +8,16 @@ import { HabitCreatePage } from './pages/HabitCreatePage'
 import { GuildInvitesPage } from './pages/GuildInvitesPage'
 import { InvitePage } from './pages/InvitePage'
 import { GuildJoinPage } from './pages/GuildJoinPage'
+import { GuildLeaderboardPage } from './pages/GuildLeaderboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { RequireAuth } from './auth/RequireAuth'
 
 export const router = createBrowserRouter([
+  {
+    path: '/guilds/:guildId/leaderboard',
+    element: <RequireAuth><GuildLeaderboardPage /></RequireAuth>,
+  },
   {
     path: '/guilds/join',
     element: <RequireAuth><GuildJoinPage /></RequireAuth>,

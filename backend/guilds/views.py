@@ -1,3 +1,4 @@
+from collections import defaultdict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.conf import settings
 from django.db import transaction
@@ -10,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import INVITE_CODE_ALPHABET, INVITE_CODE_LENGTH, Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
+from .progress import current_streak, user_local_date
 from .serializers import (
     GuildHabitSerializer, GuildInviteSerializer, GuildSerializer, HabitCompletionSerializer, InvitePreviewSerializer,
     TodayHabitSerializer,
@@ -53,6 +55,49 @@ class GuildDetailView(generics.RetrieveAPIView):
             .prefetch_related("memberships__user")
             .distinct()
         )
+
+
+class GuildLeaderboardView(APIView):
+    """Rank members using guild XP and activity in each member's local calendar."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, guild_id):
+        guild = get_object_or_404(
+            Guild.objects.filter(memberships__user=request.user), pk=guild_id,
+        )
+        sort = request.query_params.get("sort", "xp")
+        if sort not in ("xp", "streak"):
+            raise ValidationError({"sort": "Choose xp or streak."})
+        memberships = list(GuildMember.objects.filter(guild=guild).select_related("user"))
+        now = timezone.now()
+        local_dates = {member.user_id: user_local_date(member.user.timezone, now) for member in memberships}
+        dates_by_user = defaultdict(set)
+        # One batch query, independent of member count. Clear model ordering so
+        # DISTINCT collapses multiple habits completed by a user on the same day.
+        completion_dates = (
+            HabitCompletion.objects.filter(
+                habit__guild=guild,
+                user_id__in=local_dates,
+                completed_on__lte=max(local_dates.values()),
+            )
+            .order_by().values_list("user_id", "completed_on").distinct()
+        )
+        for user_id, completed_on in completion_dates:
+            dates_by_user[user_id].add(completed_on)
+        members = [{
+            "member_id": member.pk,
+            "user_id": member.user_id,
+            "username": member.user.username,
+            "xp": member.xp,
+            "streak": current_streak(dates_by_user[member.user_id], local_dates[member.user_id]),
+            "is_current_user": member.user_id == request.user.pk,
+        } for member in memberships]
+        secondary = "streak" if sort == "xp" else "xp"
+        members.sort(key=lambda member: (-member[sort], -member[secondary], member["user_id"]))
+        for rank, member in enumerate(members, start=1):
+            member["rank"] = rank
+        return Response({"guild_id": guild.pk, "guild_name": guild.name, "sort": sort, "members": members})
 
 
 class GuildHabitListCreateView(generics.ListCreateAPIView):

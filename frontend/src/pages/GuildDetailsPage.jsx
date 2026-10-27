@@ -90,7 +90,7 @@ export function GuildDetailsPage() {
         </article>
 
         <article className="members-card">
-          <div className="card-heading"><div><p className="section-label">Участники</p><h2>{guild.members.length} {guild.members.length === 1 ? 'человек' : 'участника'}</h2></div><button className="text-button" type="button">Смотреть всех</button></div>
+          <div className="card-heading"><div><p className="section-label">Участники</p><h2>{guild.members.length} {guild.members.length === 1 ? 'человек' : 'участника'}</h2></div>{!isDemo && <Link className="text-button" to={`/guilds/${encodeURIComponent(guildId)}/leaderboard`}>Лидерборд</Link>}</div>
           <ul className="members-list">
             {guild.members.map((member) => <li key={member.id}><span className="member-avatar">{member.name.slice(0, 1).toUpperCase()}</span><span><strong>{member.name}</strong>{member.role === 'owner' && <small>Создатель</small>}</span><strong className="member-xp">{member.xp.toLocaleString('ru-RU')} XP</strong></li>)}
           </ul>
