@@ -1,4 +1,4 @@
-import { ApiError, apiRequest } from './client'
+import { ApiError, apiRequest } from './client.js'
 
 const DEMO_GUILD_KEY = 'inhabit.demoGuild'
 
@@ -85,4 +85,13 @@ export async function getGuild(id) {
   const guild = normalizeGuild(await apiRequest(`/guilds/${encodeURIComponent(id)}/`))
   if (guild) return { guild, isDemo: false }
   throw new ApiError('Сервер вернул неполный ответ.')
+}
+
+export async function getGuilds() {
+  const payload = await apiRequest('/guilds/')
+  const guilds = Array.isArray(payload) ? payload : payload?.results
+  if (!Array.isArray(guilds)) throw new ApiError('Сервер вернул неполный список гильдий.')
+  const normalized = guilds.map(normalizeGuild)
+  if (normalized.some((guild) => !guild)) throw new ApiError('Сервер вернул неполный список гильдий.')
+  return normalized
 }
