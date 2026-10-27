@@ -1,10 +1,11 @@
 import re
+from datetime import timedelta
 
 from django.utils import timezone
 
 from rest_framework import serializers
 
-from .models import Guild, GuildHabit, GuildMember, HabitCompletion
+from .models import Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
 
 
 class GuildMemberSerializer(serializers.ModelSerializer):
@@ -38,6 +39,52 @@ class GuildSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         return bool(request and request.user.pk == obj.owner_id)
 
+
+class GuildInviteSerializer(serializers.ModelSerializer):
+    expires_in_days = serializers.ChoiceField(
+        choices=GuildInvite.LIFETIME_DAYS,
+        default=GuildInvite.DEFAULT_LIFETIME_DAYS,
+        write_only=True,
+    )
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = GuildInvite
+        fields = ("id", "guild", "code", "created_at", "expires_at", "is_expired", "expires_in_days")
+        read_only_fields = ("id", "guild", "code", "created_at", "expires_at")
+
+    def create(self, validated_data):
+        lifetime = timedelta(days=validated_data.pop("expires_in_days"))
+        validated_data["expires_at"] = timezone.now() + lifetime
+        return super().create(validated_data)
+
+
+
+class InvitePreviewSerializer(serializers.ModelSerializer):
+    """What a holder of the code sees before joining: no member list or habits."""
+
+    guild = serializers.SerializerMethodField()
+    is_member = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GuildInvite
+        fields = ("code", "expires_at", "guild", "is_member")
+        read_only_fields = fields
+
+    def get_guild(self, obj):
+        guild = obj.guild
+        return {
+            "id": guild.pk,
+            "name": guild.name,
+            "description": guild.description,
+            "color": guild.color,
+            "owner": guild.owner.username,
+            "members_count": guild.memberships.count(),
+        }
+
+    def get_is_member(self, obj):
+        request = self.context.get("request")
+        return bool(request and obj.guild.memberships.filter(user=request.user).exists())
 
 class GuildHabitSerializer(serializers.ModelSerializer):
     xp_reward = serializers.IntegerField(read_only=True)

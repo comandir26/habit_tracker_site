@@ -4,13 +4,16 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Guild, GuildHabit, GuildMember, HabitCompletion
-from .serializers import GuildHabitSerializer, GuildSerializer, HabitCompletionSerializer, TodayHabitSerializer
+from .models import Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
+from .serializers import (
+    GuildHabitSerializer, GuildInviteSerializer, GuildSerializer, HabitCompletionSerializer, InvitePreviewSerializer,
+    TodayHabitSerializer,
+)
 
 
 class GuildListCreateView(generics.ListCreateAPIView):
@@ -74,6 +77,47 @@ class GuildHabitListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(guild=self.get_guild())
+
+
+class GuildInviteListCreateView(generics.ListCreateAPIView):
+    """Only the owner manages invites; members get 403 and outsiders do not see the guild."""
+
+    serializer_class = GuildInviteSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_guild(self):
+        if not hasattr(self, "guild"):
+            self.guild = get_object_or_404(
+                Guild.objects.filter(memberships__user=self.request.user),
+                pk=self.kwargs["guild_id"],
+            )
+        return self.guild
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if self.get_guild().owner_id != request.user.pk:
+            raise PermissionDenied("Only the guild owner can manage invites.")
+
+    def get_queryset(self):
+        return GuildInvite.objects.filter(guild=self.get_guild(), expires_at__gt=timezone.now())
+
+    def perform_create(self, serializer):
+        serializer.save(guild=self.get_guild(), created_by=self.request.user)
+
+
+class InviteDetailView(APIView):
+    """Any signed-in user holding a valid code may preview the guild it leads to."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, code):
+        invite = get_object_or_404(
+            GuildInvite.objects.select_related("guild__owner"),
+            code=GuildInvite.normalize_code(code),
+        )
+        if invite.is_expired:
+            return Response({"detail": "This invite has expired."}, status=status.HTTP_410_GONE)
+        return Response(InvitePreviewSerializer(invite, context={"request": request}).data)
 
 
 class HabitDifficultyListView(APIView):

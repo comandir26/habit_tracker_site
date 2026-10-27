@@ -5,6 +5,8 @@ import { NotFoundPage } from './pages/NotFoundPage'
 import { GuildCreatePage } from './pages/GuildCreatePage'
 import { GuildDetailsPage } from './pages/GuildDetailsPage'
 import { HabitCreatePage } from './pages/HabitCreatePage'
+import { GuildInvitesPage } from './pages/GuildInvitesPage'
+import { InvitePage } from './pages/InvitePage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { RequireAuth } from './auth/RequireAuth'
@@ -25,6 +27,14 @@ export const router = createBrowserRouter([
   {
     path: '/guilds/:guildId/habits/new',
     element: <RequireAuth><HabitCreatePage /></RequireAuth>,
+  },
+  {
+    path: '/guilds/:guildId/invites',
+    element: <RequireAuth><GuildInvitesPage /></RequireAuth>,
+  },
+  {
+    path: '/invite/:code',
+    element: <RequireAuth><InvitePage /></RequireAuth>,
   },
   {
     path: '/login',
