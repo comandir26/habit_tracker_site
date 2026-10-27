@@ -460,3 +460,105 @@ class GuildInviteApiTests(APITestCase):
 
         self.assertEqual(invite.code, "FRESH234")
         self.assertEqual(GuildInvite.objects.filter(code=existing.code).count(), 1)
+
+
+class InviteJoinApiTests(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner")
+        self.guest = User.objects.create_user(username="guest")
+        self.guild = Guild.objects.create(name="Focus", owner=self.owner, is_private=True)
+        self.owner_membership = GuildMember.objects.create(
+            guild=self.guild, user=self.owner, role=GuildMember.Role.OWNER, xp=50,
+        )
+        self.habit = GuildHabit.objects.create(guild=self.guild, name="Read")
+        self.invite = GuildInvite.objects.create(
+            guild=self.guild, created_by=self.owner, code="ABCD2345",
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+        self.url = reverse("invite-join", args=(self.invite.code,))
+        self.client.force_authenticate(self.guest)
+
+    def test_join_grants_guild_and_habit_access_without_extra_privileges(self):
+        guild_url = reverse("guild-detail", args=(self.guild.pk,))
+        habits_url = reverse("guild-habit-list-create", args=(self.guild.pk,))
+        self.assertEqual(self.client.get(guild_url).status_code, status.HTTP_404_NOT_FOUND)
+
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data, {"guild_id": self.guild.pk, "created": True})
+        membership = GuildMember.objects.get(guild=self.guild, user=self.guest)
+        self.assertEqual(membership.role, GuildMember.Role.MEMBER)
+        self.assertEqual(membership.xp, 0)
+        self.assertEqual(self.client.get(guild_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get(habits_url).data[0]["id"], self.habit.pk)
+        self.assertEqual(self.client.post(habits_url, {"name": "Walk"}).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn(self.guild.pk, [guild["id"] for guild in self.client.get(reverse("guild-list-create")).data])
+
+    def test_join_normalizes_case_and_surrounding_whitespace(self):
+        response = self.client.post(reverse("invite-join", args=(" abcd2345 ",)), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(GuildMember.objects.filter(guild=self.guild, user=self.guest).exists())
+
+    def test_retries_and_different_invites_do_not_duplicate_or_reset_membership(self):
+        self.client.post(self.url, {}, format="json")
+        membership = GuildMember.objects.get(guild=self.guild, user=self.guest)
+        membership.xp = 75
+        membership.save(update_fields=["xp"])
+        other = GuildInvite.objects.create(
+            guild=self.guild, created_by=self.owner,
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        for url in (self.url, reverse("invite-join", args=(other.code,))):
+            response = self.client.post(url, {}, format="json")
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data, {"guild_id": self.guild.pk, "created": False})
+        self.assertEqual(GuildMember.objects.filter(guild=self.guild, user=self.guest).count(), 1)
+        membership.refresh_from_db()
+        self.assertEqual(membership.xp, 75)
+
+    def test_owner_keeps_role_and_xp(self):
+        self.client.force_authenticate(self.owner)
+        response = self.client.post(self.url, {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["created"])
+        self.owner_membership.refresh_from_db()
+        self.assertEqual(self.owner_membership.role, GuildMember.Role.OWNER)
+        self.assertEqual(self.owner_membership.xp, 50)
+
+    def test_join_requires_authentication(self):
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(self.url, {}, format="json").status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertFalse(GuildMember.objects.filter(guild=self.guild, user=self.guest).exists())
+
+    def test_invalid_and_unknown_codes_do_not_create_membership(self):
+        for code in ("short", "ABCD23456", "ABCD23!5", "ABCD2305"):
+            with self.subTest(code=code):
+                response = self.client.post(reverse("invite-join", args=(code,)), {}, format="json")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("code", response.data)
+        response = self.client.post(reverse("invite-join", args=("ZZZZ9999",)), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(GuildMember.objects.filter(guild=self.guild, user=self.guest).exists())
+
+    def test_expired_invite_including_exact_boundary_does_not_create_membership(self):
+        now = timezone.now()
+        for expires_at in (now - timedelta(seconds=1), now):
+            self.invite.expires_at = expires_at
+            self.invite.save(update_fields=["expires_at"])
+            with patch("guilds.models.timezone.now", return_value=now):
+                response = self.client.post(self.url, {}, format="json")
+            self.assertEqual(response.status_code, status.HTTP_410_GONE)
+            self.assertNotIn("guild_id", response.data)
+        self.assertFalse(GuildMember.objects.filter(guild=self.guild, user=self.guest).exists())
+
+    def test_client_cannot_choose_guild_role_xp_or_user(self):
+        other = Guild.objects.create(name="Other", owner=self.owner)
+        response = self.client.post(self.url, {
+            "guild_id": other.pk, "role": "owner", "xp": 10000, "user": self.owner.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        membership = GuildMember.objects.get(guild=self.guild, user=self.guest)
+        self.assertEqual(membership.role, GuildMember.Role.MEMBER)
+        self.assertEqual(membership.xp, 0)
+        self.assertFalse(GuildMember.objects.filter(guild=other, user=self.guest).exists())

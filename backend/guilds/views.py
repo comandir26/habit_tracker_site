@@ -5,11 +5,11 @@ from django.db.models import F
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
+from .models import INVITE_CODE_ALPHABET, INVITE_CODE_LENGTH, Guild, GuildHabit, GuildInvite, GuildMember, HabitCompletion
 from .serializers import (
     GuildHabitSerializer, GuildInviteSerializer, GuildSerializer, HabitCompletionSerializer, InvitePreviewSerializer,
     TodayHabitSerializer,
@@ -118,6 +118,33 @@ class InviteDetailView(APIView):
         if invite.is_expired:
             return Response({"detail": "This invite has expired."}, status=status.HTTP_410_GONE)
         return Response(InvitePreviewSerializer(invite, context={"request": request}).data)
+
+
+class InviteJoinView(APIView):
+    """Redeem a valid invitation without changing an existing membership."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    @transaction.atomic
+    def post(self, request, code):
+        code = GuildInvite.normalize_code(code)
+        if len(code) != INVITE_CODE_LENGTH or any(char not in INVITE_CODE_ALPHABET for char in code):
+            raise ValidationError({"code": "Use the eight-character code from your invitation."})
+        invite = get_object_or_404(GuildInvite.objects.select_for_update(), code=code)
+        if invite.is_expired:
+            return Response({"detail": "This invite has expired."}, status=status.HTTP_410_GONE)
+
+        # get_or_create and unique_guild_member also protect simultaneous joins
+        # through different invitations to the same guild.
+        _membership, created = GuildMember.objects.get_or_create(
+            guild_id=invite.guild_id,
+            user=request.user,
+            defaults={"role": GuildMember.Role.MEMBER, "xp": 0},
+        )
+        return Response(
+            {"guild_id": invite.guild_id, "created": created},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class HabitDifficultyListView(APIView):

@@ -79,3 +79,17 @@ export async function getInvite(code) {
     throw error
   }
 }
+
+export async function joinGuild(code) {
+  const normalized = normalizeInviteCode(code)
+  if (!new RegExp(`^[${codeAlphabet}]{8}$`).test(normalized)) {
+    throw new ApiError('Введите код приглашения из 8 символов.', { status: 400 })
+  }
+  try {
+    return await apiRequest(`/invites/${encodeURIComponent(normalized)}/join/`, { method: 'POST' })
+  } catch (error) {
+    if (error.status === 404) throw new ApiError('Приглашение не найдено. Проверьте код.', { status: 404 })
+    if (error.status === 410) throw new ApiError('Срок действия приглашения истёк. Попросите создателя гильдии прислать новое.', { status: 410 })
+    throw error
+  }
+}

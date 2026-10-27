@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
 function messageFor(error) {
@@ -13,6 +13,8 @@ function messageFor(error) {
 export function RegisterPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const next = location.state?.from || '/'
   const [form, setForm] = useState({ username: '', email: '', password: '' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -24,7 +26,7 @@ export function RegisterPage() {
     setSubmitting(true)
     try {
       await register({ ...form, username: form.username.trim(), email: form.email.trim(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' })
-      navigate('/', { replace: true })
+      navigate(next, { replace: true })
     } catch (requestError) {
       setError(messageFor(requestError))
     } finally {
@@ -43,6 +45,6 @@ export function RegisterPage() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Создаём…' : 'Создать аккаунт'}</button>
     </form>
-    <p className="auth-footer">Уже есть аккаунт? <Link to="/login">Войти</Link></p>
+    <p className="auth-footer">Уже есть аккаунт? <Link to="/login" state={{ from: next }}>Войти</Link></p>
   </section></main>
 }

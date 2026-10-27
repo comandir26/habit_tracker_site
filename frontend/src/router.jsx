@@ -7,11 +7,16 @@ import { GuildDetailsPage } from './pages/GuildDetailsPage'
 import { HabitCreatePage } from './pages/HabitCreatePage'
 import { GuildInvitesPage } from './pages/GuildInvitesPage'
 import { InvitePage } from './pages/InvitePage'
+import { GuildJoinPage } from './pages/GuildJoinPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { RequireAuth } from './auth/RequireAuth'
 
 export const router = createBrowserRouter([
+  {
+    path: '/guilds/join',
+    element: <RequireAuth><GuildJoinPage /></RequireAuth>,
+  },
   {
     path: '/',
     element: <HomePage />,
