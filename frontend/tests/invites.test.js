@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  buildInviteLink, createInvite, formatInviteExpiry, getInvite, getInvites, isInviteActive, normalizeInviteCode,
+  buildInviteLink, createInvite, formatInviteExpiry, getInvite, getInvites, isInviteActive, joinGuild, normalizeInviteCode,
 } from '../src/api/invites.js'
 
 const storage = new Map()
@@ -13,6 +13,34 @@ global.window = {
 
 const hour = 3_600_000
 const now = new Date('2026-10-25T12:00:00Z')
+
+test('joining posts normalized code with authentication and returns first/repeated results', async () => {
+  for (const created of [true, false]) {
+    global.fetch = async (url, options) => {
+      assert.equal(url, '/api/invites/AB3K9Q2M/join/')
+      assert.equal(options.method, 'POST')
+      assert.equal(options.headers.Authorization, 'Bearer test-token')
+      return { ok: true, status: created ? 201 : 200, json: async () => ({ guild_id: 42, created }) }
+    }
+    assert.deepEqual(await joinGuild(' ab3k9q2m '), { guild_id: 42, created })
+  }
+})
+
+test('invalid join codes fail before making a request', async () => {
+  global.fetch = async () => { throw new Error('invalid code must not call API') }
+  for (const code of ['', 'ABC', 'AB3K9Q2O', 'AB3K/Q2M', 'AB3K9Q2MEXTRA']) {
+    await assert.rejects(joinGuild(code), (error) => error.status === 400 && /8 символов/.test(error.message))
+  }
+})
+
+test('join errors explain expired and missing invites and preserve server failures', async () => {
+  for (const [status, message] of [[404, /не найдено/], [410, /истёк/], [401, /Authentication/], [500, /Server error/]]) {
+    global.fetch = async () => ({ ok: false, status, json: async () => ({ detail: status === 401 ? 'Authentication required' : 'Server error' }) })
+    await assert.rejects(joinGuild('AB3K9Q2M'), (error) => error.status === status && message.test(error.message))
+  }
+  global.fetch = async () => { throw new Error('Network unavailable') }
+  await assert.rejects(joinGuild('AB3K9Q2M'), /Network unavailable/)
+})
 
 test('invite codes are normalized and turned into shareable links', () => {
   assert.equal(normalizeInviteCode('  ab3k9q2m '), 'AB3K9Q2M')

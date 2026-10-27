@@ -63,6 +63,7 @@ export function HomePage() {
         )}
         <div className="welcome-actions">
           <Link className="button button-primary" to="/guilds/new">Создать гильдию <span aria-hidden="true">→</span></Link>
+          <Link className="button button-secondary" to="/guilds/join">Вступить по коду</Link>
           <Link className="button button-secondary" to="/guilds/demo">Открыть пример гильдии</Link>
         </div>
       </section>

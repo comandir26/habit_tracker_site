@@ -41,6 +41,6 @@ export function LoginPage() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Входим…' : 'Войти'}</button>
     </form>
-    <p className="auth-footer">Ещё нет аккаунта? <Link to="/register">Зарегистрироваться</Link></p>
+    <p className="auth-footer">Ещё нет аккаунта? <Link to="/register" state={{ from: next }}>Зарегистрироваться</Link></p>
   </section></main>
 }
