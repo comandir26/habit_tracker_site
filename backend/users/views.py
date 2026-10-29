@@ -1,3 +1,5 @@
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
@@ -5,6 +7,9 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .serializers import RegisterSerializer, UserSerializer
+from guilds.models import HabitCompletion
+from guilds.progress import current_streak, user_local_date
+from .progress import level_progress
 
 
 def token_payload_for(user):
@@ -63,3 +68,20 @@ class MeView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class ProfileView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        total_xp = user.guild_memberships.aggregate(total=Sum("xp"))["total"] or 0
+        today = user_local_date(user.timezone, timezone.now())
+        dates = HabitCompletion.objects.filter(
+            user=user, habit__guild__memberships__user=user, completed_on__lte=today,
+        ).order_by("completed_on").values_list("completed_on", flat=True).distinct()
+        return Response({
+            "id": user.pk, "username": user.username,
+            "total_xp": total_xp, **level_progress(total_xp),
+            "streak": current_streak(dates, today),
+        })

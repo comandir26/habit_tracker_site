@@ -11,5 +11,5 @@ export function AuthControls() {
   }
 
   if (!user) return <Link className="button button-secondary button-small" to="/login">Войти</Link>
-  return <div className="auth-controls"><span className="avatar" title={user.username}>{user.username.slice(0, 1).toUpperCase()}</span><button className="text-button" type="button" onClick={handleLogout}>Выйти</button></div>
+  return <div className="auth-controls"><Link to="/profile">Мой профиль</Link><span className="avatar" title={user.username}>{user.username.slice(0, 1).toUpperCase()}</span><button className="text-button" type="button" onClick={handleLogout}>Выйти</button></div>
 }
