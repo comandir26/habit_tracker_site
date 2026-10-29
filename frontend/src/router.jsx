@@ -12,8 +12,13 @@ import { GuildLeaderboardPage } from './pages/GuildLeaderboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { RequireAuth } from './auth/RequireAuth'
+import { ProfilePage } from './pages/ProfilePage'
 
 export const router = createBrowserRouter([
+  {
+    path: '/profile',
+    element: <RequireAuth><ProfilePage /></RequireAuth>,
+  },
   {
     path: '/guilds/:guildId/leaderboard',
     element: <RequireAuth><GuildLeaderboardPage /></RequireAuth>,
