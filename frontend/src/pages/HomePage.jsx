@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AuthControls } from '../auth/AuthControls'
 import { useAuth } from '../auth/AuthContext'
 import { getGuilds } from '../api/guilds'
+import { ProfileProgress } from '../components/ProfileProgress'
 
 import { getTodayHabits, getTodayHabitsFromApi } from '../api/habits'
 import { habitSchedule } from '../api/habitOptions'
@@ -95,7 +96,7 @@ export function HomePage() {
           <Link className="button button-secondary" to="/guilds/demo">Открыть пример гильдии</Link>
         </div>
       </section>
-      <aside className="home-level-card" aria-label="Текущий уровень"><span>◆</span><p>Ваш уровень</p><strong>7</strong><small>1 840 / 2 000 XP</small></aside>
+      {user && <aside aria-label="Текущий уровень"><ProfileProgress compact /></aside>}
     </main>
   )
 }
