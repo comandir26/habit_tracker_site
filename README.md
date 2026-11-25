@@ -1,28 +1,70 @@
 # inHabit
 
-Геймифицированный трекер привычек с гильдиями.
+inHabit — веб-приложение для отслеживания привычек в командах, которые называются гильдиями. Владелец гильдии задаёт привычки, расписание и награду. Участники отмечают выполнение, получают очки опыта (XP) и сравнивают результаты в лидерборде. На главной отображаются привычки на сегодня с учётом часового пояса пользователя, а в профиле — суммарный XP, уровень и серия активных дней.
 
-## Стек
-Django + DRF + PostgreSQL, React, Docker Compose.
+## Технологический стек
 
-## Запуск
+| Компонент | Технологии и назначение |
+| --- | --- |
+| Frontend | React 19 и React Router 7 для интерфейса и навигации, Vite 7 для разработки и сборки, pnpm для зависимостей |
+| Backend | Python 3.12, Django и Django REST Framework для API, Simple JWT для аутентификации |
+| База данных | PostgreSQL 16 для пользователей, гильдий, привычек и отметок выполнения |
+| Локальный запуск | Docker Compose запускает базу, backend и frontend. Nginx раздаёт собранный frontend и направляет запросы `/api/` на backend |
 
-### Frontend
+## Локальный запуск
+
+Понадобится запущенный Docker с Docker Compose. Выполните команды из корня репозитория, где лежит `docker-compose.yml`.
+
+При первом запуске скопируйте `.env.example` в `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+В Linux или macOS используйте `cp .env.example .env`.
+
+Запустите сервисы и примените миграции:
 
 ```bash
+docker compose up --build -d
+docker compose exec backend python manage.py migrate
+```
+
+Откройте [http://localhost:5173](http://localhost:5173). Если в `.env` задан `FRONTEND_PORT`, используйте указанный там порт. Backend доступен на `http://localhost:8000`, API — по префиксу `/api/`. Для остановки выполните `docker compose down`.
+
+### Режим разработки frontend
+
+Для разработки с автообновлением понадобятся Node.js 24 и pnpm 11.19.0. Запустите в Docker только базу и backend, чтобы освободить порт 5173 для Vite. Примените миграции, если база ещё пустая.
+
+```bash
+docker compose stop frontend
+docker compose up --build -d backend db
+docker compose exec backend python manage.py migrate
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
+```
+
+Задайте адрес backend для Vite и запустите frontend.
+
+```powershell
+$env:VITE_PROXY_TARGET = 'http://localhost:8000'
 pnpm dev
 ```
 
-Приложение будет доступно по адресу `http://localhost:5173`. В режиме
-разработки запросы к `/api` Vite перенаправляет на backend-контейнер.
+В Linux или macOS выполните `VITE_PROXY_TARGET=http://localhost:8000 pnpm dev`. Откройте [http://localhost:5173](http://localhost:5173).
 
-Для production-сборки frontend:
+## Куда перейти в приложении
 
-```bash
-docker compose up --build frontend
-```
+| Страница | Что можно сделать |
+| --- | --- |
+| [Регистрация](http://localhost:5173/register) или [вход](http://localhost:5173/login) | Создать аккаунт или войти |
+| [Главная](http://localhost:5173/) | Посмотреть привычки на сегодня и открыть одну из своих гильдий |
+| [Создать гильдию](http://localhost:5173/guilds/new) | Создать свою команду |
+| [Вступить по коду](http://localhost:5173/guilds/join) | Ввести код приглашения и вступить в гильдию |
+| Гильдия, `/guilds/<id>` | Отметить выполнение, открыть лидерборд, а владельцу — добавить привычку или создать приглашение |
+| [Мой профиль](http://localhost:5173/profile) | Посмотреть суммарный XP, уровень и текущую серию активных дней |
+
+Для первой проверки зарегистрируйтесь, создайте гильдию и добавьте ежедневную привычку. Отметьте её на странице гильдии, затем откройте «Мой профиль» и проверьте начисленные XP.
 
 ## Спринт 1: текущее состояние
 
